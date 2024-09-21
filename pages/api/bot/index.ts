@@ -10,6 +10,13 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 // HumanMessage : LLM 챗봇에 전달할 사용자메세지 타입이다.
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 
+// 프롬프트 템플릿 참조하기
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+
+// LLM 응답 메세지 타입을 원하는 타입결과물과 파싱해주는 아웃풋참조하기
+// StringOutputParser 는 AIMessage 타입에서 content 속성값만 문자열로 반환해주는 파서이다.
+import { StringOutputParser } from '@langchain/core/output_parsers';
+
 // 메세지 인터페이스 타입참조
 import { IMemberMessage, UserType } from '@/interfaces/message';
 
@@ -51,14 +58,46 @@ export default async function handler(
       });
 
       //Step3 : LLM 과 통신하기
-      const result = await llm.invoke(prompt);
-      console.log(result);
+      // CASE1. 심플 챗봇
+      // const result = await llm.invoke(prompt);
+
+      // CASE2. 역할기반 챗봇
+      // const messages = [
+      //   new SystemMessage('내가 보낸 메세지를 일본어로 번역해줘'),
+      //   new HumanMessage(prompt),
+      // ];
+      // const result = await llm.invoke(messages);
+
+      // result 메세지 타입은 AIMessage 타입으로 변환된다.
+
+      // CASE3 : 프롬프트 템플릿을 이용한 메세지를 전달하고 응답받기
+      const promptTemplate = ChatPromptTemplate.fromMessages([
+        ['system', '내가 보낸 메세지를 영어로 번역해줘'],
+        ['user', '{input}'],
+      ]);
+
+      // LLM outputParser를 이용해 응답메세지를 문자열로 변환하기
+      const outputparsers = new StringOutputParser();
+
+      // LLM 에 질물과 응답과정에서 발생하는 작업의 단위를 chain이라고 한다.
+      // 여러개의 체인을 연결해 최종 사용자 질문에 응답을 받는 방법을 LangChain에서는 파이프라인 이라고한다.
+      // CASE 3-1 : 프롬프트 템플릿을 이용한 메세지 전달하고 응답받기
+      // const chain = promptTemplate.pipe(llm);
+      // const result = await chain.invoke({ input: prompt });
+
+      // CASE 3-2 : outputparser를 이용한 2개의 체인을 실행하기
+      const chains = promptTemplate.pipe(llm).pipe(outputparsers);
+
+      // output parser를 이용했기 때문에 invoke 결과값이 AIMessage 문자열로 반환된다.
+      const resultMessage = await chains.invoke({ input: prompt });
+
+      // console.log('LLM 모델에서 전달된 챗봇 응답 결과값 : ' + result);
 
       // Step 4 : 챗봇 응답 메세지를 프론트엔드 메세지 타입으로 변환하여 결과 값 반환하기
       const resultMsg: IMemberMessage = {
         user_type: UserType.BOT,
         nick_name: 'BOT',
-        message: result.content as string,
+        message: resultMessage, // result.content as string,
         send_date: new Date(),
       };
 
